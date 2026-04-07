@@ -1,18 +1,41 @@
-name: Deploy to staging
+name: Deploy to Server
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  redeploy_everything:
+  deploy:
     runs-on: ubuntu-latest
-    name: Deploying everything to the staging cluster
+
     steps:
-      - run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" &> ~/ssh_key
-          mkdir -p /home/runner/.ssh
-          ls /home/runner/.ssh
-          touch /home/runner/.ssh/known_hosts
-          echo "${{ secrets.KNOWN_HOSTS }}" &> /home/runner/.ssh/known_hosts
-          chmod 700 /home/runner/ssh_key
-          ssh -o StrictHostKeyChecking=no -i ~/ssh_key root@54.234.51.90 -t "cd CICD-Demo/ && git pull origin main && export PATH=/root/.nvm/versions/node/v22.13.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin && npm install -g pnpm && pnpm install && pnpm run build && pm2 restart fe-sever && pm2 restart http-sever && pm2 restart ws-sever"
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH and Deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          # Setup SSH directory
+          mkdir -p ~/.ssh
+
+          # Write private key from secret
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add server to known hosts
+          ssh-keyscan -H 54.234.51.90 >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # Deploy to server
+          ssh -i ~/.ssh/deploy_key root@54.234.51.90 -t \
+            "cd CICD-Demo/ && \
+             git pull origin main && \
+             export PATH=/root/.nvm/versions/node/v22.13.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin && \
+             npm install -g pnpm && \
+             pnpm install && \
+             pnpm run build && \
+             pm2 restart fe-sever && \
+             pm2 restart http-sever && \
+             pm2 restart ws-sever"
